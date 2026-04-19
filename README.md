@@ -1,4 +1,4 @@
-# 🛒 PART 1: Product Creation Example
+# 🛒  PART 1: Product Creation Example
 
 This section demonstrates how to create a product with variations (e.g., color and size) using the proposed database structure.
 
@@ -247,3 +247,143 @@ INSERT INTO stock_movements (
 
 This design supports real-world inventory systems used in e-commerce and retail.
 
+# 🧾  PART 3: Orders, Customers and Sellers
+
+This section introduces customer management, sellers (ERP users), and the order system with stock reservation and automatic inventory updates.
+
+---
+
+## Customers
+
+Stores customer data.
+
+### Example
+
+```sql
+INSERT INTO customers (name, phone, city, state)
+VALUES ('John Doe', '31999999999', 'Belo Horizonte', 'MG');
+```
+
+---
+
+## Sellers
+
+Represents ERP users responsible for sales.
+
+```sql
+INSERT INTO sellers (name, phone, city, state)
+VALUES ('Alice Sales', '31988888888', 'Belo Horizonte', 'MG');
+```
+
+---
+
+## Orders
+
+Orders represent a sale transaction.
+
+### Order Status
+
+* `PENDING` → Order created (stock reserved)
+* `CONFIRMED` → Order finalized (stock deducted)
+* `CANCELLED` → Order canceled (stock released)
+
+---
+
+## Creating an Order
+
+```sql
+INSERT INTO orders (customer_id, seller_id)
+VALUES (1, 1);
+```
+
+---
+
+## Adding Items (Triggers Reservation)
+
+```sql
+INSERT INTO order_items (
+    order_id,
+    product_variation_id,
+    quantity,
+    price
+) VALUES (
+    1,
+    1,
+    2,
+    350.00
+);
+```
+
+---
+
+## Important Behavior
+
+When an item is added:
+
+* Stock is NOT immediately deducted
+* Stock is RESERVED across available locations
+* The system prevents overselling
+
+---
+
+## Reservation Logic
+
+* The system searches available stock
+* It splits reservations across locations if needed
+* It blocks the operation if stock is insufficient
+
+---
+
+## Confirm Order (Stock Deduction)
+
+```sql
+UPDATE orders
+SET status = 'CONFIRMED'
+WHERE id = 1;
+```
+
+✔ Stock is permanently reduced
+✔ Reservations are consumed
+
+---
+
+## Cancel Order (Release Stock)
+
+```sql
+UPDATE orders
+SET status = 'CANCELLED'
+WHERE id = 1;
+```
+
+✔ Reservations are removed
+✔ Stock remains unchanged
+
+---
+
+## Critical Rules
+
+* Never update stock manually
+* Never bypass reservations
+* Always use order flow
+
+---
+
+## Order Flow Summary
+
+1. Create order → `PENDING`
+2. Add items → stock is reserved
+3. Confirm → stock is deducted
+4. Cancel → reservations are released
+
+---
+
+## Final Result
+
+This system now supports:
+
+* Multi-location inventory
+* Stock reservation (anti-oversell)
+* Automatic stock updates
+* Real ERP order lifecycle
+
+You now have a **complete inventory + sales engine** ready for real-world applications.

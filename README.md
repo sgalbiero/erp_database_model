@@ -386,4 +386,127 @@ This system now supports:
 * Automatic stock updates
 * Real ERP order lifecycle
 
-You now have a **complete inventory + sales engine** ready for real-world applications.
+#  PART 3: Payments & Invoices
+
+This section introduces payment processing and invoice generation, completing the order lifecycle.
+
+---
+
+## Payments
+
+Payments are linked to orders and control when an order is finalized.
+
+### Payment Methods
+
+* `CASH`
+* `CREDIT_CARD`
+* `DEBIT_CARD`
+* `PIX`
+* `BANK_TRANSFER`
+
+---
+
+## Creating a Payment
+
+```sql
+INSERT INTO payments (
+    order_id,
+    method,
+    amount
+) VALUES (
+    1,
+    'PIX',
+    700.00
+);
+```
+
+---
+
+## Confirm Payment
+
+```sql
+UPDATE payments
+SET status = 'PAID',
+    paid_at = CURRENT_TIMESTAMP
+WHERE id = 1;
+```
+
+---
+
+## Important Behavior
+
+When a payment is marked as `PAID`:
+
+* The order is automatically set to `CONFIRMED`
+* Stock is deducted (via order trigger)
+* Invoice is automatically created
+
+---
+
+## Invoices
+
+Invoices are generated automatically when an order is confirmed.
+
+---
+
+## Invoice Lifecycle
+
+* `DRAFT` → Automatically created
+* `ISSUED` → Officially issued
+* `CANCELLED` → Voided invoice
+
+---
+
+## Issue Invoice
+
+```sql
+UPDATE invoices
+SET status = 'ISSUED'
+WHERE id = 1;
+```
+
+✔ Invoice number is generated
+✔ Issue date is set automatically
+
+---
+
+## Invoice Structure
+
+Each invoice contains:
+
+* Order reference
+* Items (copied from order)
+* Total amount
+
+---
+
+## Full Sales Flow
+
+1. Create order (`PENDING`)
+2. Add items → stock reserved
+3. Create payment (`PENDING`)
+4. Confirm payment → order becomes `CONFIRMED`
+5. Stock is deducted
+6. Invoice is created (`DRAFT`)
+7. Issue invoice (`ISSUED`)
+
+---
+
+## Critical Rules
+
+* Do NOT manually confirm orders (use payments)
+* Do NOT manually create invoices
+* Always follow the payment flow
+
+---
+
+## Final Result
+
+The system now supports:
+
+* Full order lifecycle
+* Payment processing
+* Automatic invoice generation
+* Stock integrity with reservation
+
+You now have a **complete ERP sales pipeline**, ready for real-world usage.

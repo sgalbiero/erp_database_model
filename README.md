@@ -168,9 +168,9 @@ Inventory is updated through movements.
 
 ### Types
 
-* `IN` → دخول / entrada (stock increase)
-* `OUT` → saída (stock decrease)
-* `TRANSFER` → transferência entre locais
+* `IN` → (stock increase)
+* `OUT` → (stock decrease)
+* `TRANSFER` → (local transference)
 
 ---
 
@@ -192,7 +192,7 @@ INSERT INTO stock_movements (
 
 ---
 
-## Example: Stock خروج
+## Example: Stock
 
 ```sql
 INSERT INTO stock_movements (

@@ -386,7 +386,7 @@ This system now supports:
 * Automatic stock updates
 * Real ERP order lifecycle
 
-#  PART 3: Payments & Invoices
+# 💳  PART 3: Payments & Invoices
 
 This section introduces payment processing and invoice generation, completing the order lifecycle.
 

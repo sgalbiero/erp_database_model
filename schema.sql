@@ -1,5 +1,5 @@
 -- START OF THE PRODUCTS LOGIC (Usage queries in the README.md) --
--- Products base
+-- Products Base
 CREATE TABLE products (
     id SERIAL PRIMARY KEY,
     name VARCHAR(150) NOT NULL,
@@ -10,14 +10,14 @@ CREATE TABLE products (
     category_id INT REFERENCES categories(id)
 );
 
--- Categories base
+-- Categories Base
 CREATE TABLE categories (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     description TEXT
 );
 
--- Variation types (Examples: Color, Size, Voltage)
+-- Variation Types (Examples: Color, Size, Voltage)
 CREATE TABLE variation_types (
     id SERIAL PRIMARY KEY,
     name VARCHAR(50) NOT NULL
@@ -52,14 +52,14 @@ DECLARE
     base_sku TEXT;
     suffix TEXT;
 BEGIN
-    -- get main SKU
+    -- Get Main SKU
     SELECT p.main_sku
     INTO base_sku
     FROM products p
     JOIN product_variations pv ON pv.product_id = p.id
     WHERE pv.id = NEW.variation_id;
 
-    -- build suffix (color, size, etc.)
+    -- Build Suffix (color, size, etc.)
     SELECT string_agg(v.value, '-' ORDER BY vt.name)
     INTO suffix
     FROM product_variation_items pvi
@@ -67,7 +67,7 @@ BEGIN
     JOIN variation_types vt ON vt.id = v.variation_type_id
     WHERE pvi.variation_id = NEW.variation_id;
 
-    -- update SKU
+    -- Update SKU
     UPDATE product_variations
     SET sku = base_sku || '-' || suffix
     WHERE id = NEW.variation_id;
@@ -80,5 +80,112 @@ CREATE TRIGGER trg_update_variation_sku
 AFTER INSERT ON product_variation_items
 FOR EACH ROW
 EXECUTE FUNCTION update_variation_sku();
-
 -- END OF THE PRODUCTS LOGIC --
+
+-- START OF THE STOCKING LOGIC --
+-- Suppliers Base --
+CREATE TABLE suppliers (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    phone VARCHAR(20) NOT NULL,
+    street VARCHAR(150),
+    number VARCHAR(20),
+    neighborhood VARCHAR(100),
+    city VARCHAR(100),
+    state CHAR(2)
+);
+
+-- Suppliers for Products --
+CREATE TABLE supplier_products (
+    id SERIAL PRIMARY KEY,
+    supplier_id INT REFERENCES suppliers(id),
+    product_id INT REFERENCES products(id),
+    UNIQUE (supplier_id, product_id)
+);
+
+-- Stock Locations --
+CREATE TABLE stock_locations (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    description TEXT,
+    manager_name VARCHAR(150),
+    manager_phone VARCHAR(20),
+    street VARCHAR(150),
+    number VARCHAR(20),
+    neighborhood VARCHAR(100),
+    city VARCHAR(100),
+    state CHAR(2)
+);
+
+-- CORE STOCK TABLE
+CREATE TABLE stock (
+    id SERIAL PRIMARY KEY,
+    product_variation_id INT REFERENCES product_variations(id),
+    stock_location_id INT REFERENCES stock_locations(id),
+    quantity INT NOT NULL DEFAULT 0,
+    
+    UNIQUE (product_variation_id, stock_location_id)
+);
+
+-- Stock Movements
+CREATE TYPE movement_type AS ENUM ('IN', 'OUT', 'TRANSFER');
+
+CREATE TABLE stock_movements (
+    id SERIAL PRIMARY KEY,
+    product_variation_id INT REFERENCES product_variations(id),
+    
+    origin_location_id INT REFERENCES stock_locations(id),
+    destination_location_id INT REFERENCES stock_locations(id),
+    
+    quantity INT NOT NULL,
+    movement_type movement_type NOT NULL,
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Automatic Trigger for Stock Update
+CREATE OR REPLACE FUNCTION update_stock_after_movement()
+RETURNS TRIGGER AS $$
+BEGIN
+
+    -- In
+    IF NEW.movement_type = 'IN' THEN
+        INSERT INTO stock (product_variation_id, stock_location_id, quantity)
+        VALUES (NEW.product_variation_id, NEW.destination_location_id, NEW.quantity)
+        ON CONFLICT (product_variation_id, stock_location_id)
+        DO UPDATE SET quantity = stock.quantity + NEW.quantity;
+    END IF;
+
+    -- Out
+    IF NEW.movement_type = 'OUT' THEN
+        UPDATE stock
+        SET quantity = quantity - NEW.quantity
+        WHERE product_variation_id = NEW.product_variation_id
+        AND stock_location_id = NEW.origin_location_id;
+    END IF;
+
+    -- Transfer
+    IF NEW.movement_type = 'TRANSFER' THEN
+        
+        -- Remove from the origin
+        UPDATE stock
+        SET quantity = quantity - NEW.quantity
+        WHERE product_variation_id = NEW.product_variation_id
+        AND stock_location_id = NEW.origin_location_id;
+
+        -- Add to the destinated
+        INSERT INTO stock (product_variation_id, stock_location_id, quantity)
+        VALUES (NEW.product_variation_id, NEW.destination_location_id, NEW.quantity)
+        ON CONFLICT (product_variation_id, stock_location_id)
+        DO UPDATE SET quantity = stock.quantity + NEW.quantity;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Stock Update Trigger
+CREATE TRIGGER trg_update_stock
+AFTER INSERT ON stock_movements
+FOR EACH ROW
+EXECUTE FUNCTION update_stock_after_movement();

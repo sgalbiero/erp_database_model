@@ -1,4 +1,4 @@
-# 🛒 Product Creation Example
+# 🛒 PART 1: Product Creation Example
 
 This section demonstrates how to create a product with variations (e.g., color and size) using the proposed database structure.
 
@@ -102,3 +102,148 @@ Do NOT generate SKU when inserting into `product_variations`.
 * SKU is generated automatically
 
 This flow ensures consistency and scalability for real-world ERP systems.
+
+# 📦  PART 2: Inventory & Suppliers
+
+This section introduces suppliers, stock locations, and inventory control.
+
+---
+
+## Suppliers
+
+Stores supplier data.
+
+### Example
+
+```sql
+INSERT INTO suppliers (name, phone, city, state)
+VALUES ('Nike Supplier BR', '31999999999', 'Belo Horizonte', 'MG');
+```
+
+---
+
+## Linking Supplier to Product
+
+```sql
+INSERT INTO supplier_products (supplier_id, product_id)
+VALUES (1, 1);
+```
+
+---
+
+## Stock Locations
+
+Represents warehouses, stores, or distribution centers.
+
+### Example
+
+```sql
+INSERT INTO stock_locations (name, city, state)
+VALUES ('Main Warehouse', 'Belo Horizonte', 'MG');
+
+INSERT INTO stock_locations (name, city, state)
+VALUES ('Store Center', 'São Paulo', 'SP');
+```
+
+---
+
+## Stock Structure
+
+Stock is controlled per:
+
+* Product variation
+* Location
+
+This allows:
+
+* Multi-warehouse control
+* Real-time inventory
+* Accurate stock tracking
+
+---
+
+## Stock Movements
+
+Inventory is updated through movements.
+
+### Types
+
+* `IN` → دخول / entrada (stock increase)
+* `OUT` → saída (stock decrease)
+* `TRANSFER` → transferência entre locais
+
+---
+
+## Example: Stock Entry
+
+```sql
+INSERT INTO stock_movements (
+    product_variation_id,
+    destination_location_id,
+    quantity,
+    movement_type
+) VALUES (
+    1,
+    1,
+    50,
+    'IN'
+);
+```
+
+---
+
+## Example: Stock خروج
+
+```sql
+INSERT INTO stock_movements (
+    product_variation_id,
+    origin_location_id,
+    quantity,
+    movement_type
+) VALUES (
+    1,
+    1,
+    5,
+    'OUT'
+);
+```
+
+---
+
+## Example: Transfer Between Locations
+
+```sql
+INSERT INTO stock_movements (
+    product_variation_id,
+    origin_location_id,
+    destination_location_id,
+    quantity,
+    movement_type
+) VALUES (
+    1,
+    1,
+    2,
+    10,
+    'TRANSFER'
+);
+```
+
+---
+
+## Important Notes
+
+* Do NOT update the `stock` table manually
+* Always use `stock_movements`
+* Stock is automatically updated via triggers
+
+---
+
+## Summary
+
+* Suppliers linked to products
+* Stock separated by location
+* Movements control inventory
+* Fully scalable ERP structure
+
+This design supports real-world inventory systems used in e-commerce and retail.
+

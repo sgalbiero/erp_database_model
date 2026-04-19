@@ -356,3 +356,160 @@ FOR EACH ROW
 WHEN (OLD.status IS DISTINCT FROM NEW.status)
 EXECUTE FUNCTION cancel_order();
 -- END OF THE ORDERING LOGIC --
+
+-- START OF THE PAYMENT AND INVOICES LOGIC --
+-- PAYMENTS
+CREATE TYPE payment_method AS ENUM (
+    'CASH',
+    'CREDIT_CARD',
+    'DEBIT_CARD',
+    'PIX',
+    'BANK_TRANSFER'
+);
+
+CREATE TYPE payment_status AS ENUM (
+    'PENDING',
+    'PAID',
+    'FAILED',
+    'REFUNDED'
+);
+
+CREATE TABLE payments (
+    id SERIAL PRIMARY KEY,
+    order_id INT REFERENCES orders(id) ON DELETE CASCADE,
+    
+    method payment_method NOT NULL,
+    status payment_status DEFAULT 'PENDING',
+    
+    amount NUMERIC(10,2) NOT NULL,
+    
+    paid_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Invoices
+CREATE TYPE invoice_status AS ENUM (
+    'DRAFT',
+    'ISSUED',
+    'CANCELLED'
+);
+
+CREATE TABLE invoices (
+    id SERIAL PRIMARY KEY,
+    order_id INT UNIQUE REFERENCES orders(id),
+    
+    number VARCHAR(50) UNIQUE, -- invoice number (NF-e, etc.)
+    
+    status invoice_status DEFAULT 'DRAFT',
+    
+    total_amount NUMERIC(10,2),
+    
+    issued_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- INVOICE ITEMS
+CREATE TABLE invoice_items (
+    id SERIAL PRIMARY KEY,
+    invoice_id INT REFERENCES invoices(id) ON DELETE CASCADE,
+    product_variation_id INT REFERENCES product_variations(id),
+    
+    quantity INT NOT NULL,
+    unit_price NUMERIC(10,2) NOT NULL,
+    total_price NUMERIC(10,2) NOT NULL
+);
+
+-- AUTO UPDATE ORDER STATUS WHEN PAYMENT IS PAID
+CREATE OR REPLACE FUNCTION update_order_after_payment()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.status = 'PAID' THEN
+        UPDATE orders
+        SET status = 'CONFIRMED'
+        WHERE id = NEW.order_id;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_payment_confirm_order
+AFTER UPDATE ON payments
+FOR EACH ROW
+WHEN (OLD.status IS DISTINCT FROM NEW.status)
+EXECUTE FUNCTION update_order_after_payment();
+
+-- AUTO CREATE INVOICE WHEN ORDER IS CONFIRMED
+CREATE OR REPLACE FUNCTION create_invoice_after_order()
+RETURNS TRIGGER AS $$
+DECLARE
+    total NUMERIC(10,2);
+    item RECORD;
+    invoice_id INT;
+BEGIN
+    IF NEW.status = 'CONFIRMED' THEN
+
+        -- Calculate total
+        SELECT SUM(quantity * price)
+        INTO total
+        FROM order_items
+        WHERE order_id = NEW.id;
+
+        -- Create invoice
+        INSERT INTO invoices (order_id, total_amount, status)
+        VALUES (NEW.id, total, 'DRAFT')
+        RETURNING id INTO invoice_id;
+
+        -- Copy items
+        FOR item IN
+            SELECT * FROM order_items WHERE order_id = NEW.id
+        LOOP
+            INSERT INTO invoice_items (
+                invoice_id,
+                product_variation_id,
+                quantity,
+                unit_price,
+                total_price
+            )
+            VALUES (
+                invoice_id,
+                item.product_variation_id,
+                item.quantity,
+                item.price,
+                item.quantity * item.price
+            );
+        END LOOP;
+
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_create_invoice
+AFTER UPDATE ON orders
+FOR EACH ROW
+WHEN (OLD.status IS DISTINCT FROM NEW.status)
+EXECUTE FUNCTION create_invoice_after_order();
+
+-- Issue Invoice (SET NUMBER AND DATE)
+CREATE OR REPLACE FUNCTION issue_invoice()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.status = 'ISSUED' THEN
+        NEW.issued_at := CURRENT_TIMESTAMP;
+
+        -- Simple invoice number generation
+        NEW.number := 'INV-' || NEW.id || '-' || EXTRACT(EPOCH FROM NOW());
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_issue_invoice
+BEFORE UPDATE ON invoices
+FOR EACH ROW
+WHEN (OLD.status IS DISTINCT FROM NEW.status)
+EXECUTE FUNCTION issue_invoice();
+-- END OF THE PAYMENT AND INVOICES LOGIC --
